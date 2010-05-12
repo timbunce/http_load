@@ -227,6 +227,7 @@ main( int argc, char** argv )
     int cnum;
     char* url_file;
     char* sip_file;
+    char* seed_arg = NULL;
 #ifdef RLIMIT_NOFILE
     struct rlimit limits;
 #endif /* RLIMIT_NOFILE */
@@ -334,6 +335,10 @@ main( int argc, char** argv )
 		exit( 1 );
 		}
 	    }
+	else if ( strncmp( argv[argn], "-seed", strlen( argv[argn] ) ) == 0 && argn + 1 < argc )
+	    {
+	    seed_arg = argv[++argn];
+	    }
 	else if ( strncmp( argv[argn], "-sip", strlen( argv[argn] ) ) == 0 && argn + 1 < argc )
 	    sip_file = argv[++argn];
 #ifdef USE_SSL
@@ -411,11 +416,18 @@ main( int argc, char** argv )
     total_badchecksums = 0;
 
     /* Initialize the random number generator. */
+    if (seed_arg) {
+        if (do_verbose)
+            (void) fprintf( stderr, "Seed %d\n", atoi( seed_arg ) );
+        srandom( atoi( seed_arg ) );
+    }
+    else {
 #ifdef HAVE_SRANDOMDEV
-    srandomdev();
+        srandomdev();
 #else
-    srandom( (int) time( (time_t*) 0 ) ^ getpid() );
+        srandom( (int) time( (time_t*) 0 ) ^ getpid() );
 #endif
+    }
 
     /* Initialize the rest. */
     tmr_init();
@@ -511,7 +523,7 @@ static void
 usage( void )
     {
     (void) fprintf( stderr,
-	"usage:  %s [-checksum] [-throttle] [-proxy host:port] [-verbose] [-timeout secs] [-sip sip_file]\n", argv0 );
+	"usage:  %s [-checksum] [-throttle] [-proxy host:port] [-verbose] [-seed N] [-timeout secs] [-sip sip_file]\n", argv0 );
 #ifdef USE_SSL
     (void) fprintf( stderr,
 	"            [-cipher str]\n" );
