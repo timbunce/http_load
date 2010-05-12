@@ -913,7 +913,7 @@ static void
 handle_connect( int cnum, struct timeval* nowP, int double_check )
     {
     int url_num;
-    char buf[600];
+    char buf[5000];
     int bytes, r;
 
     url_num = connections[cnum].url_num;
@@ -1006,20 +1006,20 @@ handle_connect( int cnum, struct timeval* nowP, int double_check )
 	{
 #ifdef USE_SSL
 	bytes = snprintf(
-	    buf, sizeof(buf), "GET %s://%.500s:%d%.500s HTTP/1.0\r\n",
+	    buf, sizeof(buf), "GET %s://%s:%d%s HTTP/1.0\r\n",
 	    urls[url_num].protocol == PROTO_HTTPS ? "https" : "http",
 	    urls[url_num].hostname, (int) urls[url_num].port,
 	    urls[url_num].filename );
 #else
 	bytes = snprintf(
-	    buf, sizeof(buf), "GET http://%.500s:%d%.500s HTTP/1.0\r\n",
+	    buf, sizeof(buf), "GET http://%s:%d%s HTTP/1.0\r\n",
 	    urls[url_num].hostname, (int) urls[url_num].port,
 	    urls[url_num].filename );
 #endif
 	}
     else
 	bytes = snprintf(
-	    buf, sizeof(buf), "GET %.500s HTTP/1.0\r\n",
+	    buf, sizeof(buf), "GET %s HTTP/1.0\r\n",
 	    urls[url_num].filename );
     bytes += snprintf(
 	&buf[bytes], sizeof(buf) - bytes, "Host: %s\r\n",
@@ -1027,6 +1027,13 @@ handle_connect( int cnum, struct timeval* nowP, int double_check )
     bytes += snprintf(
 	&buf[bytes], sizeof(buf) - bytes, "User-Agent: %s\r\n", VERSION );
     bytes += snprintf( &buf[bytes], sizeof(buf) - bytes, "\r\n" );
+
+    if (bytes >= sizeof(buf)-1) {
+        (void) fprintf(
+            stderr, "request skipped, too long: %s\n", urls[url_num].filename );
+	close_connection( cnum );
+	return;
+    }
 
     /* Send the request. */
     connections[cnum].request_at = *nowP;
