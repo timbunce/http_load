@@ -123,6 +123,7 @@ typedef struct {
     long bytes;
     long checksum;
     int http_status;
+    int start_seqn;
     } connection;
 static connection* connections;
 static int max_connections, num_connections, max_parallel;
@@ -177,6 +178,9 @@ static long long total_response_usecs, max_response_usecs, min_response_usecs;
 int total_timeouts, total_badbytes, total_badchecksums;
 
 static long start_interval, low_interval, high_interval, range_interval;
+
+/* log connections that take longer than this */
+static long long log_connect_usecs_thresh = 3*1000*1000;
 
 #ifdef USE_SSL
 static SSL_CTX* ssl_ctx = (SSL_CTX*) 0;
@@ -810,6 +814,7 @@ start_connection( struct timeval* nowP )
 		    max_parallel = num_connections;
 		}
 	    ++fetches_started;
+	    connections[cnum].start_seqn = fetches_started;
 	    return;
 	    }
     /* No slots left. */
@@ -920,7 +925,8 @@ handle_connect( int cnum, struct timeval* nowP, int double_check )
     if ( double_check )
 	{
 	/* Check to make sure the non-blocking connect succeeded. */
-	int err, errlen;
+	int err;
+        socklen_t errlen;
 
 	if ( connect(
 		 connections[cnum].conn_fd,
@@ -1653,6 +1659,17 @@ static void
 close_connection( int cnum )
     {
     int url_num;
+    long long connect_usecs = -1;
+    long long response_usecs = -1;
+    int sock_port = -1;
+
+    if (1) {
+	struct sockaddr_in sa;
+	socklen_t sa_len = sizeof(sa);
+	if (getsockname(connections[cnum].conn_fd, (struct sockaddr *)&sa, &sa_len) == 0)
+	    sock_port = ntohs(sa.sin_port);
+	else printf("getsockname: %s\n", strerror(errno));
+    }
 
 #ifdef USE_SSL
     if ( urls[connections[cnum].url_num].protocol == PROTO_HTTPS )
@@ -1669,7 +1686,7 @@ close_connection( int cnum )
     total_bytes += connections[cnum].bytes;
     if ( connections[cnum].did_connect )
 	{
-	long long connect_usecs = delta_timeval(
+	connect_usecs = delta_timeval(
 	    &connections[cnum].connect_at, &connections[cnum].request_at );
 	total_connect_usecs += connect_usecs;
 	max_connect_usecs = max( max_connect_usecs, connect_usecs );
@@ -1678,7 +1695,7 @@ close_connection( int cnum )
 	}
     if ( connections[cnum].did_response )
 	{
-	long long response_usecs = delta_timeval(
+	response_usecs = delta_timeval(
 	    &connections[cnum].request_at, &connections[cnum].response_at );
 	total_response_usecs += response_usecs;
 	max_response_usecs = max( max_response_usecs, response_usecs );
@@ -1687,6 +1704,19 @@ close_connection( int cnum )
 	}
     if ( connections[cnum].http_status >= 0 && connections[cnum].http_status <= 999 )
 	++http_status_counts[connections[cnum].http_status];
+
+    /* log slow connections */
+    if (1 && connect_usecs > log_connect_usecs_thresh) {
+	printf("%d\t%d\t%d\t%lld\t%lld\t%d\n",
+	    connections[cnum].start_seqn,
+	    0,
+	    sock_port,
+	    connect_usecs, response_usecs,
+	    connections[cnum].http_status
+	);
+        /* automatically use this as the new threshold */
+	log_connect_usecs_thresh = connect_usecs;
+    }
 
     url_num = connections[cnum].url_num;
     if ( do_checksum )
