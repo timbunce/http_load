@@ -1760,7 +1760,7 @@ close_connection( int cnum )
 	    if ( connections[cnum].bytes != urls[url_num].bytes )
 		{
 		(void) fprintf(
-		    stderr, "%s: byte count wrong\n", urls[url_num].url_str );
+		    stderr, "%s: byte count wrong (%ld vs %ld)\n", urls[url_num].url_str, connections[cnum].bytes, urls[url_num].bytes );
 		++total_badbytes;
 		}
 	    }
